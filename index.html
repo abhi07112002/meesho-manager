@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Meesho Seller Manager</title>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
+<style>
+:root{--bg:#f5f6fa;--card:#fff;--ink:#182230;--muted:#687386;--line:#e7eaf0;--brand:#6c45d9;--green:#12805c;--red:#c43c50}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:15px system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+header{background:#fff;border-bottom:1px solid var(--line);padding:16px 22px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+h1{font-size:20px;margin:0} .sub{font-size:12px;color:var(--muted)}main{max-width:1200px;margin:auto;padding:20px}
+button,.btn{border:0;border-radius:9px;background:var(--brand);color:white;padding:10px 14px;font-weight:650;cursor:pointer}
+button.secondary{background:#ece8fb;color:#4e31a7}button.danger{background:#fff0f1;color:var(--red)}
+input,select{border:1px solid var(--line);border-radius:8px;padding:10px;background:white;color:var(--ink);min-width:0}
+.auth,.panel,.stat{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px}
+.auth{max-width:430px;margin:45px auto}.auth input{width:100%;margin:6px 0 12px}
+.grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin:16px 0}
+.stat small{color:var(--muted)}.stat strong{display:block;font-size:25px;margin-top:5px}
+.toolbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:14px}.toolbar input{flex:1;min-width:180px}
+.tabs{display:flex;gap:8px;flex-wrap:wrap;margin:15px 0}.tabs button{background:#e9eaf0;color:#374151}.tabs button.active{background:var(--brand);color:#fff}
+table{width:100%;border-collapse:collapse;min-width:850px}th,td{text-align:left;padding:11px 9px;border-bottom:1px solid var(--line);font-size:13px}th{color:var(--muted);font-weight:650;background:#fafbfc}
+.tablewrap{overflow:auto}.empty{text-align:center;color:var(--muted);padding:35px}
+.status{display:inline-block;padding:4px 8px;border-radius:20px;background:#eef0f5;font-size:11px;font-weight:700}
+.notice{padding:11px 13px;border-radius:9px;background:#fff8df;color:#765700;font-size:13px;margin:12px 0}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}.right{margin-left:auto}
+.hidden{display:none!important}.muted{color:var(--muted);font-size:12px}
+@media(max-width:760px){main{padding:12px}.grid{grid-template-columns:repeat(2,minmax(0,1fr))}header{padding:13px}.stat strong{font-size:21px}}
+</style>
+</head>
+<body>
+<header><div><h1>Meesho Seller Manager</h1><div class="sub">Your private order, return & settlement tracker</div></div><div class="row"><span id="syncState" class="sub">Not connected</span><button id="logoutBtn" class="secondary hidden">Sign out</button></div></header>
+<main>
+<section id="setupNotice" class="notice">First setup required: add your Firebase web app configuration in <b>config.js</b>. Then publish the Firestore security rules from README.md.</section>
+<section id="auth" class="auth">
+<h2 style="margin-top:0">Sign in / Create account</h2>
+<label>Email</label><input id="email" type="email" placeholder="you@example.com">
+<label>Password</label><input id="password" type="password" placeholder="At least 6 characters">
+<div class="row"><button id="signup">Create account</button><button id="signin" class="secondary">Sign in</button></div>
+<p id="authMsg" class="muted"></p>
+</section>
+<section id="app" class="hidden">
+<div class="grid">
+<div class="stat"><small>Total orders</small><strong id="total">0</strong></div>
+<div class="stat"><small>Delivered</small><strong id="delivered">0</strong></div>
+<div class="stat"><small>Returns + RTO</small><strong id="returns">0</strong></div>
+<div class="stat"><small>Net sales (entered)</small><strong id="sales">₹0</strong></div>
+</div>
+<div class="panel">
+<div class="toolbar">
+<input id="search" placeholder="Search order ID, product, SKU…">
+<select id="statusFilter"><option value="">All statuses</option><option>Pending</option><option>Shipped</option><option>Delivered</option><option>Return</option><option>RTO</option><option>Cancelled</option></select>
+<button id="importBtn">Import CSV</button><input id="csvFile" type="file" accept=".csv,text/csv" class="hidden">
+<button id="addBtn" class="secondary">+ Add order</button>
+<button id="exportBtn" class="secondary">Export CSV</button>
+</div>
+<div class="tabs"><button class="active" data-tab="orders">Orders</button><button data-tab="reports">Reports</button></div>
+<div id="ordersView">
+<div class="muted" style="margin-bottom:10px">Import a Meesho CSV report to add/update rows. Matching Order IDs are updated instead of duplicated.</div>
+<div class="tablewrap"><table><thead><tr><th>Order ID</th><th>Product</th><th>SKU</th><th>Status</th><th>Order date</th><th>Amount</th><th>Actions</th></tr></thead><tbody id="tbody"></tbody></table></div>
+<div id="empty" class="empty">No orders yet. Import a CSV or add your first order.</div>
+</div>
+<div id="reportsView" class="hidden">
+<h3>Order status summary</h3><div id="summary" class="muted">No data yet.</div>
+<h3>Important</h3><p class="muted">“Net sales” is the sum of the Amount field for Delivered orders only. It is not guaranteed profit or final Meesho settlement. Add actual settlement/fees separately before treating it as income.</p>
+</div>
+</div>
+</section>
+</main>
+<script src="config.js"></script>
+<script>
+const $=id=>document.getElementById(id);
+let auth=null, db=null, unsubscribe=null, orders=[];
+const money=n=>'₹'+Number(n||0).toLocaleString('en-IN',{maximumFractionDigits:2});
+function configReady(){return window.FIREBASE_CONFIG && window.FIREBASE_CONFIG.apiKey && !String(window.FIREBASE_CONFIG.apiKey).includes('YOUR_')}
+function setMsg(t){$('authMsg').textContent=t}
+function normalStatus(s=''){let x=String(s).toLowerCase();if(x.includes('deliver'))return 'Delivered';if(x.includes('return')&&!x.includes('rto'))return 'Return';if(x.includes('rto')||x.includes('return to origin'))return 'RTO';if(x.includes('cancel'))return 'Cancelled';if(x.includes('ship')||x.includes('dispatch')||x.includes('transit'))return 'Shipped';return 'Pending'}
+function pick(row,keys){for(const k of keys){const found=Object.keys(row).find(x=>x.toLowerCase().trim()===k.toLowerCase());if(found&&row[found]!==undefined)return row[found]}return ''}
+function clean(row){let order_id=String(pick(row,['Order ID','Sub Order No','Sub Order ID','Order Id','order_id'])).trim();if(!order_id)return null;let amount=pick(row,['Selling Price','Order Amount','Final Amount','Amount','Supplier Listed Price','Price']);amount=Number(String(amount).replace(/[₹, ]/g,''))||0;return {order_id,product:String(pick(row,['Product Name','Product','Product Title','product'])),sku:String(pick(row,['SKU','SKU ID','Supplier SKU'])),status:normalStatus(pick(row,['Order Status','Status','Shipment Status'])),order_date:String(pick(row,['Order Date','Created At','Date'])).slice(0,40),amount,raw:row}}
+function csvParse(text){let rows=[],row=[],v='',q=false;for(let i=0;i<text.length;i++){let c=text[i];if(c==='"'&&q&&text[i+1]==='"'){v+='"';i++}else if(c==='"')q=!q;else if(c===','&&!q){row.push(v);v=''}else if((c==='\n'||c==='\r')&&!q){if(c==='\r'&&text[i+1]==='\n')i++;row.push(v);if(row.some(x=>x.trim()))rows.push(row);row=[];v=''}else v+=c}row.push(v);if(row.some(x=>x.trim()))rows.push(row);if(rows.length<2)return [];let headers=rows.shift().map(x=>x.trim());return rows.map(r=>Object.fromEntries(headers.map((h,i)=>[h,r[i]||''])))}
+function startLive(uid){
+ if(unsubscribe)unsubscribe();
+ unsubscribe=db.collection('users').doc(uid).collection('orders').onSnapshot(snap=>{
+  orders=snap.docs.map(d=>d.data());render();$('syncState').textContent='Cloud sync connected';
+ },err=>{console.error(err);$('syncState').textContent='Sync error: '+err.message;});
+}
+async function saveOrder(o){const uid=auth.currentUser.uid;await db.collection('users').doc(uid).collection('orders').doc(String(o.order_id)).set({...o,updated_at:firebase.firestore.FieldValue.serverTimestamp()},{merge:true})}
+function render(){let filtered=orders.filter(o=>(!$('statusFilter').value||o.status===$('statusFilter').value)&&JSON.stringify(o).toLowerCase().includes($('search').value.toLowerCase()));$('tbody').innerHTML=filtered.map(o=>`<tr><td>${esc(o.order_id)}</td><td>${esc(o.product||'—')}</td><td>${esc(o.sku||'—')}</td><td><span class="status">${esc(o.status)}</span></td><td>${esc(o.order_date||'—')}</td><td>${money(o.amount)}</td><td><button class="secondary" onclick="editOrder('${encodeURIComponent(o.order_id)}')">Edit</button> <button class="danger" onclick="deleteOrder('${encodeURIComponent(o.order_id)}')">Delete</button></td></tr>`).join('');$('empty').classList.toggle('hidden',filtered.length>0);$('total').textContent=orders.length;$('delivered').textContent=orders.filter(o=>o.status==='Delivered').length;$('returns').textContent=orders.filter(o=>['Return','RTO'].includes(o.status)).length;$('sales').textContent=money(orders.filter(o=>o.status==='Delivered').reduce((a,o)=>a+Number(o.amount||0),0));$('summary').innerHTML=['Pending','Shipped','Delivered','Return','RTO','Cancelled'].map(s=>`${s}: <b>${orders.filter(o=>o.status===s).length}</b>`).join(' &nbsp; | &nbsp; ')}
+function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+window.editOrder=async id=>{let o=orders.find(x=>x.order_id===decodeURIComponent(id));if(!o)return;let status=prompt('Status: Pending, Shipped, Delivered, Return, RTO, Cancelled',o.status);if(status===null)return;let amount=prompt('Amount in ₹',o.amount);if(amount===null)return;try{await saveOrder({...o,status:normalStatus(status),amount:Number(amount)||0})}catch(e){alert(e.message)}}
+window.deleteOrder=async id=>{if(!confirm('Delete this order?'))return;try{await db.collection('users').doc(auth.currentUser.uid).collection('orders').doc(decodeURIComponent(id)).delete()}catch(e){alert(e.message)}}
+$('signup').onclick=async()=>{try{await auth.createUserWithEmailAndPassword($('email').value,$('password').value);setMsg('Account created.')}catch(e){setMsg(e.message)}};
+$('signin').onclick=async()=>{try{await auth.signInWithEmailAndPassword($('email').value,$('password').value);setMsg('Signed in.')}catch(e){setMsg(e.message)}};
+$('logoutBtn').onclick=()=>auth.signOut();
+function onSession(user){let logged=!!user;$('auth').classList.toggle('hidden',logged);$('app').classList.toggle('hidden',!logged);$('logoutBtn').classList.toggle('hidden',!logged);$('setupNotice').classList.toggle('hidden',configReady());$('syncState').textContent=logged?'Connecting cloud…':'Not signed in';if(logged)startLive(user.uid);else{if(unsubscribe)unsubscribe();orders=[]}}
+$('importBtn').onclick=()=>$('csvFile').click();
+$('csvFile').onchange=async e=>{let file=e.target.files[0];if(!file)return;try{let parsed=csvParse(await file.text()),valid=parsed.map(clean).filter(Boolean);if(!valid.length)throw Error('No recognised Order ID column.');for(let i=0;i<valid.length;i+=50){await Promise.all(valid.slice(i,i+50).map(saveOrder))}alert(`Imported/updated ${valid.length} orders.`)}catch(err){alert('Import failed: '+err.message)}e.target.value=''};
+$('addBtn').onclick=async()=>{let order_id=prompt('Order ID');if(!order_id)return;let product=prompt('Product name')||'';let sku=prompt('SKU')||'';let status=normalStatus(prompt('Status (Pending/Shipped/Delivered/Return/RTO/Cancelled)','Pending')||'Pending');let amount=Number(prompt('Amount in ₹','0'))||0;try{await saveOrder({order_id,product,sku,status,amount,order_date:new Date().toISOString().slice(0,10)})}catch(e){alert(e.message)}};
+$('search').oninput=render;$('statusFilter').onchange=render;
+document.querySelectorAll('.tabs button').forEach(b=>b.onclick=()=>{document.querySelectorAll('.tabs button').forEach(x=>x.classList.remove('active'));b.classList.add('active');$('ordersView').classList.toggle('hidden',b.dataset.tab!=='orders');$('reportsView').classList.toggle('hidden',b.dataset.tab!=='reports')});
+$('exportBtn').onclick=()=>{let cols=['order_id','product','sku','status','order_date','amount'];let csv=[cols.join(','),...orders.map(o=>cols.map(k=>'"'+String(o[k]??'').replace(/"/g,'""')+'"').join(','))].join('\n');let a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));a.download='meesho-orders.csv';a.click();URL.revokeObjectURL(a.href)};
+if(configReady()){firebase.initializeApp(window.FIREBASE_CONFIG);auth=firebase.auth();db=firebase.firestore();auth.onAuthStateChanged(onSession)}else{$('setupNotice').classList.remove('hidden');$('syncState').textContent='Setup required'}
+</script>
+</body></html>
